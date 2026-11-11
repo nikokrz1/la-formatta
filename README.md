@@ -1,4 +1,4 @@
-# Controle de Estoque — La Bella Donna
+# Controle de Estoque — La Formatta Pizzaria
 
 Duas páginas estáticas que conectam direto no Supabase (mesmo banco do [dashboard de BI](https://github.com/nikokrz1/la-bella-donna-bi)), hospedadas via GitHub Pages.
 

@@ -71,7 +71,7 @@
 <div class="wrap">
   <header class="top">
     <h1>Preços de Insumos</h1>
-    <div class="subtitle">La Bella Donna — atualize sempre que houver reajuste de fornecedor</div>
+    <div class="subtitle">La Formatta Pizzaria — atualize sempre que houver reajuste de fornecedor</div>
     <input type="search" id="searchInput" placeholder="Buscar insumo...">
     <button id="btnAddInsumo" style="margin-top:8px;font:inherit;font-weight:600;font-size:13px;background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent);border-radius:8px;padding:8px 14px;cursor:pointer;">+ Adicionar insumo</button>
   </header>
@@ -83,8 +83,9 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="auth.js"></script>
 <script>
-const SUPABASE_URL = "https://fwsvefewovxfdjytktxn.supabase.co";
+const SUPABASE_URL ="https://fwsvefewovxfdjytktxn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3c3ZlZmV3b3Z4ZmRqeXRrdHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2Nzg4MzMsImV4cCI6MjEwMzI1NDgzM30.hweZym6XaB1G1QCSFLXxE4Sm2JhC775XxW6nhtZ0APc";
 const CATEGORY_ORDER = ["Embutidos", "Queijos", "Carnes", "Molhos", "Vegetais", "Limpeza", "Outros"];
 
@@ -104,9 +105,10 @@ function showToast(msg) {
 }
 
 async function sbFetch(path, opts = {}) {
+  const token = await lbdAuth.ensure();
   const headers = Object.assign({
     'apikey': SUPABASE_ANON_KEY,
-    'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + token,
     'Content-Type': 'application/json; charset=utf-8'
   }, opts.headers || {});
   const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, Object.assign({}, opts, { headers }));
