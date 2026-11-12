@@ -112,7 +112,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const CATEGORIAS = {
   "CMV": ["MSX Food", "Delly's", "Duplex Papeis", "Cartão de Crédito (compras reais)"],
-  "Despesas Operacionais": ["Folha+Encargos", "Estrutura", "Administrativo", "Sistema/Operacional", "Marketing", "Royalties/Outros"],
+  "Despesas Operacionais": ["Folha+Encargos", "Estrutura", "Administrativo", "Sistema/Operacional", "Marketing", "Royalties/Outros", "Jurídico/Trabalhista"],
   "Despesas Financeiras": ["Rolagem de Dívida", "Taxas (Saipos/Stone/iFood)"]
 };
 
@@ -414,17 +414,22 @@ function renderRecorrentesCatalog() {
   if (!el) return;
   if (!recorrentesCache.length) { el.innerHTML = '<div class="empty-state">Nenhum item fixo cadastrado ainda.</div>'; return; }
   el.innerHTML = recorrentesCache.map(r => `
-    <div class="funcionario-row" data-id="${r.id}">
+    <div class="funcionario-row" data-id="${r.id}" style="grid-template-columns:1.4fr 1fr 0.9fr 0.7fr;">
       <div class="field"><label>Nome</label><input type="text" data-role="nome" value="${r.nome}"></div>
       <div class="field"><label>Subcategoria</label>
         <select data-role="subcategoria">${Object.entries(CATEGORIAS).map(([cat, subs]) => subs.map(s => `<option value="${cat}|||${s}" ${r.categoria === cat && r.subcategoria === s ? 'selected' : ''}>${s}</option>`).join('')).join('')}</select>
       </div>
       <div class="field"><label>Valor padrão (R$)</label><input type="number" step="0.01" data-role="valor" value="${r.valor_padrao || ''}"></div>
+      <div class="field"><label>Dia venc.</label><input type="number" min="1" max="31" step="1" placeholder="—" data-role="dia" value="${r.dia_vencimento || ''}"></div>
     </div>`).join('');
   $$('.funcionario-row', el).forEach(row => {
     const id = row.dataset.id;
     $('[data-role="nome"]', row).addEventListener('blur', e => saveRecorrente(id, { nome: e.target.value }));
     $('[data-role="valor"]', row).addEventListener('blur', e => saveRecorrente(id, { valor_padrao: parseFloat(e.target.value) || 0 }));
+    $('[data-role="dia"]', row).addEventListener('blur', e => {
+      const dia = parseInt(e.target.value, 10);
+      saveRecorrente(id, { dia_vencimento: (dia >= 1 && dia <= 31) ? dia : null });
+    });
     $('[data-role="subcategoria"]', row).addEventListener('change', e => {
       const [categoria, subcategoria] = e.target.value.split('|||');
       saveRecorrente(id, { categoria, subcategoria });
@@ -486,12 +491,16 @@ async function loadChecklist() {
       if (valorStr === null) return;
       const valor = parseFloat(valorStr);
       if (isNaN(valor) || valor <= 0) { showToast('Valor inválido'); return; }
-      await sbFetch('despesas', {
-        method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([{
-          data: from, categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome,
-          valor: valor, origem: 'checklist', recorrente_id: r.id
-        }])
-      });
+      const novo = {
+        data: from, categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome,
+        valor: valor, origem: 'checklist', recorrente_id: r.id
+      };
+      // Só quando o item tem "dia venc." cadastrado: passa a aparecer em Vencimentos até ser marcado como pago.
+      if (r.dia_vencimento) {
+        const ult = new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
+        novo.vencimento = mes + '-' + String(Math.min(r.dia_vencimento, ult)).padStart(2, '0');
+      }
+      await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([novo]) });
       showToast('Lançado: ' + r.nome);
       loadChecklist();
     });

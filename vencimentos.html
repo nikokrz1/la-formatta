@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vencimentos</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --bg: #f5f4ee; --bg-raised: #ffffff; --ink: #23271f; --ink-soft: #5b6157;
+    --border: #dedad0; --accent: #2c6b5e; --accent-soft: #e3efe9; --accent-ink: #0f3a30;
+    --danger: #b13a2f; --danger-soft: #fbe4e0; --warn: #8a5a00; --warn-soft: #fbefd2; --chip-bg: #eceae1;
+    --shadow: 0 1px 2px rgba(35,39,31,0.06), 0 4px 14px rgba(35,39,31,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1d19; --bg-raised: #24261f; --ink: #ece9e0; --ink-soft: #a5a99c;
+      --border: #383b32; --accent: #6cc4ac; --accent-soft: #23342d; --accent-ink: #a9e6d1;
+      --danger: #e28579; --danger-soft: #3a221e; --warn: #e8bd63; --warn-soft: #3a3019; --chip-bg: #2c2e26;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Work Sans', system-ui, sans-serif; font-size: 15px; line-height: 1.45; }
+  h1, h2 { font-family: 'Fraunces', Georgia, serif; text-wrap: balance; margin: 0; }
+  .mono { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 0 80px; }
+
+  header.top { background: var(--bg); border-bottom: 1px solid var(--border); padding: 16px 18px 12px; }
+  header.top h1 { font-size: 22px; font-weight: 600; color: var(--accent-ink); }
+  header.top .subtitle { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+  html.embed header.top { display: none; }
+
+  main { padding: 16px 14px 0; }
+  .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  @media (min-width: 560px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+  .kpi { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); }
+  .kpi .l { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); }
+  .kpi .v { font-size: 17px; font-weight: 700; margin-top: 4px; color: var(--accent-ink); }
+  .kpi .n { font-size: 11.5px; color: var(--ink-soft); }
+  .kpi.late .v { color: var(--danger); }
+  .kpi.total { background: var(--accent-soft); border-color: var(--accent); }
+
+  section.grp { margin-bottom: 18px; }
+  section.grp h2 { font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  section.grp h2 .sub { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+  section.grp.late h2 { color: var(--danger); }
+  .item { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow); }
+  .item.late { border-color: var(--danger); background: var(--danger-soft); }
+  .item .t { font-weight: 600; }
+  .item .m { font-size: 12px; color: var(--ink-soft); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+  .item .val { font-weight: 700; text-align: right; }
+  .item .act { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+  .badge { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--chip-bg); color: var(--ink-soft); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.late { background: var(--danger); color: #fff; }
+  button.pay { font: inherit; font-weight: 700; font-size: 13px; background: var(--accent); color: var(--bg-raised); border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button.pay:disabled { opacity: .5; }
+  button.link { font: inherit; font-size: 12px; font-weight: 600; background: none; border: none; color: var(--ink-soft); cursor: pointer; text-decoration: underline; }
+  .empty-state { text-align: center; padding: 26px 10px; color: var(--ink-soft); font-size: 13px; }
+  details.pagos { margin-top: 6px; }
+  details.pagos summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--ink-soft); margin-bottom: 8px; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--accent-ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .25s ease; z-index: 50; }
+  .toast.show { opacity: 1; }
+</style>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Vencimentos</h1>
+    <div class="subtitle">La Formatta Pizzaria — compromissos a pagar</div>
+  </header>
+  <main id="mainArea"><div class="empty-state">Carregando…</div></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="auth.js"></script>
+<script>
+const SUPABASE_URL = "https://fwsvefewovxfdjytktxn.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3c3ZlZmV3b3Z4ZmRqeXRrdHhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2Nzg4MzMsImV4cCI6MjEwMzI1NDgzM30.hweZym6XaB1G1QCSFLXxE4Sm2JhC775XxW6nhtZ0APc";
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function pad(n) { return String(n).padStart(2, '0'); }
+function localISO(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function addDays(iso, n) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return localISO(d); }
+function fmtMoney(n) { return (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function fmtDate(iso) { return iso.split('-').reverse().slice(0, 2).join('/'); }
+function fmtDateFull(iso) { return iso.split('-').reverse().join('/'); }
+function showToast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(showToast._h); showToast._h = setTimeout(() => t.classList.remove('show'), 2000); }
+
+async function sbFetch(path, opts = {}) {
+  const token = await lbdAuth.ensure();
+  const headers = Object.assign({ 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json; charset=utf-8' }, opts.headers || {});
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, Object.assign({}, opts, { headers }));
+  if (!res.ok) throw new Error('Supabase error ' + res.status + ': ' + (await res.text().catch(() => '')));
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('application/json') ? res.json() : null;
+}
+
+// Vencimento de um item fixo no mês: dia escolhido, limitado ao último dia do mês.
+function vencDoMes(ano, mes0, dia) {
+  const ultimo = new Date(ano, mes0 + 1, 0).getDate();
+  return ano + '-' + pad(mes0 + 1) + '-' + pad(Math.min(dia, ultimo));
+}
+
+let HOJE = localISO(new Date());
+
+async function load() {
+  HOJE = localISO(new Date());
+  const ano = +HOJE.slice(0, 4), mes0 = +HOJE.slice(5, 7) - 1;
+  const from = ano + '-' + pad(mes0 + 1) + '-01';
+  const to = localISO(new Date(ano, mes0 + 1, 1));
+
+  const [pend, pagos, recs, lancMes] = await Promise.all([
+    sbFetch('despesas?select=*&vencimento=not.is.null&pago_em=is.null&order=vencimento.asc,id.asc'),
+    sbFetch('despesas?select=*&vencimento=not.is.null&pago_em=not.is.null&order=pago_em.desc,id.desc&limit=15'),
+    sbFetch('despesas_recorrentes?select=*&ativo=is.true&dia_vencimento=not.is.null'),
+    sbFetch(`despesas?select=recorrente_id&recorrente_id=not.is.null&data=gte.${from}&data=lt.${to}`)
+  ]);
+
+  const jaLancado = new Set(lancMes.map(d => d.recorrente_id));
+  const items = pend.map(d => ({
+    kind: 'despesa', id: d.id, venc: d.vencimento, desc: d.descricao || d.subcategoria,
+    sub: d.subcategoria, valor: Number(d.valor), parcela: d.parcela_info, fornecedor: d.fornecedor
+  }));
+  recs.filter(r => !jaLancado.has(r.id)).forEach(r => items.push({
+    kind: 'fixo', id: r.id, rec: r, venc: vencDoMes(ano, mes0, r.dia_vencimento), desc: r.nome,
+    sub: r.subcategoria, valor: Number(r.valor_padrao) || 0, parcela: null, previsto: true
+  }));
+  items.sort((a, b) => a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : 0);
+  render(items, pagos, { ano, mes0, from });
+}
+
+function render(items, pagos, ctx) {
+  const fimSemana = addDays(HOJE, 7);
+  const fimMes = localISO(new Date(ctx.ano, ctx.mes0 + 1, 0));
+  const g = {
+    atrasados: items.filter(i => i.venc < HOJE),
+    hoje: items.filter(i => i.venc === HOJE),
+    semana: items.filter(i => i.venc > HOJE && i.venc <= fimSemana),
+    mes: items.filter(i => i.venc > fimSemana && i.venc <= fimMes),
+    depois: items.filter(i => i.venc > fimMes && i.venc > fimSemana)
+  };
+  const soma = a => a.reduce((s, i) => s + i.valor, 0);
+  const kpi = (cls, l, a) => `<div class="kpi ${cls}"><div class="l">${l}</div><div class="v mono">${fmtMoney(soma(a))}</div><div class="n">${a.length} ${a.length === 1 ? 'item' : 'itens'}</div></div>`;
+
+  let html = `<div class="kpis">
+    ${kpi(g.atrasados.length ? 'late' : '', 'Atrasado', g.atrasados)}
+    ${kpi('', 'Hoje', g.hoje)}
+    ${kpi('', 'Próx. 7 dias', g.semana)}
+    ${kpi('total', 'Total a pagar', items)}
+  </div>`;
+
+  const grp = (cls, titulo, a) => a.length ? `<section class="grp ${cls}"><h2>${titulo}<span class="sub">${fmtMoney(soma(a))}</span></h2>${a.map(i => itemHtml(i, cls === 'late')).join('')}</section>` : '';
+  html += grp('late', 'Atrasados', g.atrasados) + grp('', 'Hoje', g.hoje) + grp('', 'Próximos 7 dias', g.semana) + grp('', 'Resto do mês', g.mes) + grp('', 'Meses seguintes', g.depois);
+  if (!items.length) html += '<div class="empty-state">Nada a pagar por enquanto. 🎉<br>Compromissos com vencimento (Telegram ou Checklist) aparecem aqui.</div>';
+
+  if (pagos.length) {
+    html += `<details class="pagos"><summary>Pagos recentemente (${pagos.length})</summary>${pagos.map(d => `
+      <div class="item"><div><div class="t">✅ ${esc(d.descricao || d.subcategoria)}${d.parcela_info ? ' <span class="badge">' + esc(d.parcela_info) + '</span>' : ''}</div>
+      <div class="m">venc. ${fmtDateFull(d.vencimento)} · pago em ${fmtDateFull(d.pago_em)}</div></div>
+      <div class="val mono">${fmtMoney(d.valor)}</div>
+      <div class="act"><button class="link" data-act="desfazer" data-id="${d.id}">desfazer pagamento</button></div></div>`).join('')}</details>`;
+  }
+  $('#mainArea').innerHTML = html;
+  const byKey = {}; items.forEach(i => { byKey[i.kind + ':' + i.id] = i; });
+  $$('[data-act="pagar"]').forEach(b => b.addEventListener('click', () => pagar(byKey[b.dataset.key], b, ctx)));
+  $$('[data-act="desfazer"]').forEach(b => b.addEventListener('click', () => desfazer(b.dataset.id)));
+}
+
+function itemHtml(i, late) {
+  const dias = Math.round((new Date(HOJE + 'T12:00:00') - new Date(i.venc + 'T12:00:00')) / 86400000);
+  const tag = late ? `<span class="badge late">${dias} ${dias === 1 ? 'dia' : 'dias'} de atraso</span>` : (i.venc === HOJE ? '<span class="badge warn">vence hoje</span>' : '');
+  return `<div class="item ${late ? 'late' : ''}">
+    <div><div class="t">${esc(i.desc)}${i.parcela ? ' <span class="badge">' + esc(i.parcela) + '</span>' : ''}</div>
+      <div class="m"><span>vence ${fmtDate(i.venc)}</span><span class="badge">${esc(i.sub)}</span>${i.kind === 'fixo' ? '<span class="badge">item fixo · previsto</span>' : ''}${tag}</div></div>
+    <div class="val mono">${i.valor ? fmtMoney(i.valor) : '—'}</div>
+    <div class="act"><button class="pay" data-act="pagar" data-key="${i.kind}:${i.id}">Marcar como pago</button></div></div>`;
+}
+
+async function pagar(i, btn, ctx) {
+  btn.disabled = true;
+  try {
+    if (i.kind === 'despesa') {
+      await sbFetch('despesas?id=eq.' + i.id, { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ pago_em: HOJE }) });
+    } else {
+      // Item fixo ainda não lançado no mês: informa o valor real, lança e já marca como pago.
+      const s = prompt(`Valor pago de "${i.desc}":`, i.valor || '');
+      if (s === null) { btn.disabled = false; return; }
+      const valor = parseFloat(String(s).replace(',', '.'));
+      if (isNaN(valor) || valor <= 0) { showToast('Valor inválido'); btn.disabled = false; return; }
+      const r = i.rec;
+      await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([{
+        data: ctx.from, categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome, valor: valor,
+        origem: 'checklist', recorrente_id: r.id, vencimento: i.venc, pago_em: HOJE
+      }]) });
+    }
+    showToast('Pago: ' + i.desc);
+    await load();
+  } catch (e) { showToast('Erro: ' + e.message.slice(0, 80)); btn.disabled = false; }
+}
+
+async function desfazer(id) {
+  if (!confirm('Voltar esse item para "a pagar"?')) return;
+  try {
+    await sbFetch('despesas?id=eq.' + id, { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ pago_em: null }) });
+    showToast('Pagamento desfeito');
+    await load();
+  } catch (e) { showToast('Erro: ' + e.message.slice(0, 80)); }
+}
+
+load().catch(e => { $('#mainArea').innerHTML = '<div class="empty-state">Não consegui carregar: ' + esc(e.message) + '</div>'; });
+</script>
+</body>
+</html>
