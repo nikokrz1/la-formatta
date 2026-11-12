@@ -83,7 +83,11 @@
     transition: opacity 0.25s ease, transform 0.25s ease; z-index: 50;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  /* dentro do portal (?embed=1): só esconde o título repetido */
+  html.embed header.top h1, html.embed header.top .subtitle { display: none; }
 </style>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
 
 <div class="wrap">
   <header class="top">
@@ -559,6 +563,15 @@ $$('.tabs button').forEach(btn => {
     render();
   });
 });
+
+// abre direto numa aba quando vier ?tab=... (usado pelo portal); sem o parâmetro, nada muda
+(function () {
+  const t = new URLSearchParams(location.search).get('tab');
+  if (t && ['notas', 'funcionarios', 'checklist', 'historico'].includes(t)) {
+    activeTab = t;
+    $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+  }
+})();
 
 render();
 </script>

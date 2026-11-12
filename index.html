@@ -160,7 +160,11 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 
   ::selection { background: var(--accent-soft); }
+
+  /* dentro do portal (?embed=1): só esconde o título repetido */
+  html.embed header.top h1, html.embed header.top .subtitle { display: none; }
 </style>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
 
 <div class="wrap">
   <header class="top">

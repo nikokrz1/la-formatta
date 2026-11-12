@@ -66,7 +66,11 @@
 
   .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--accent-ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; z-index: 50; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  /* dentro do portal (?embed=1): só esconde o título repetido */
+  html.embed header.top h1, html.embed header.top .subtitle { display: none; }
 </style>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
 
 <div class="wrap">
   <header class="top">
