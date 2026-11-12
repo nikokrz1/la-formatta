@@ -2,6 +2,10 @@
 
 Duas páginas estáticas que conectam direto no Supabase (mesmo banco do [dashboard de BI](https://github.com/nikokrz1/la-bella-donna-bi)), hospedadas via GitHub Pages.
 
+## Link único
+
+- **[portal.html](portal.html)** — menu com Estoque, Lançamentos, Checklist, Insumos e CMV (abre o Metabase). Só junta as páginas abaixo; cada uma continua funcionando sozinha no mesmo endereço de sempre.
+
 ## Páginas
 
 - **[index.html](index.html)** — preenchimento diário de estoque (uso: funcionário responsável pelo estoque)
