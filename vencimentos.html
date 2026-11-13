@@ -126,7 +126,8 @@ async function load() {
   const jaLancado = new Set(lancMes.map(d => d.recorrente_id));
   const items = pend.map(d => ({
     kind: 'despesa', id: d.id, venc: d.vencimento, desc: d.descricao || d.subcategoria,
-    sub: d.subcategoria, valor: Number(d.valor), parcela: d.parcela_info, fornecedor: d.fornecedor
+    sub: d.subcategoria, valor: Number(d.valor), parcela: d.parcela_info, fornecedor: d.fornecedor,
+    obs: [d.numero_nota && !(d.descricao || '').includes(d.numero_nota) ? 'NF ' + d.numero_nota : '', d.observacao].filter(Boolean).join(' | ')
   }));
   recs.filter(r => !jaLancado.has(r.id)).forEach(r => items.push({
     kind: 'fixo', id: r.id, rec: r, venc: vencDoMes(ano, mes0, r.dia_vencimento), desc: r.nome,
@@ -178,7 +179,8 @@ function itemHtml(i, late) {
   const tag = late ? `<span class="badge late">${dias} ${dias === 1 ? 'dia' : 'dias'} de atraso</span>` : (i.venc === HOJE ? '<span class="badge warn">vence hoje</span>' : '');
   return `<div class="item ${late ? 'late' : ''}">
     <div><div class="t">${esc(i.desc)}${i.parcela ? ' <span class="badge">' + esc(i.parcela) + '</span>' : ''}</div>
-      <div class="m"><span>vence ${fmtDate(i.venc)}</span><span class="badge">${esc(i.sub)}</span>${i.kind === 'fixo' ? '<span class="badge">item fixo · previsto</span>' : ''}${tag}</div></div>
+      <div class="m"><span>vence ${fmtDate(i.venc)}</span><span class="badge">${esc(i.sub)}</span>${i.kind === 'fixo' ? '<span class="badge">item fixo · previsto</span>' : ''}${tag}</div>
+      ${i.obs ? `<div class="m" style="margin-top:4px;color:var(--ink-soft);font-size:12.5px;line-height:1.35">${esc(i.obs)}</div>` : ''}</div>
     <div class="val mono">${i.valor ? fmtMoney(i.valor) : '—'}</div>
     <div class="act"><button class="pay" data-act="pagar" data-key="${i.kind}:${i.id}">Marcar como pago</button></div></div>`;
 }
