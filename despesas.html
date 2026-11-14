@@ -279,7 +279,7 @@ function renderRecentTable(target, rows) {
     <tr data-id="${r.id}">
       <td>${r.data.split('-').reverse().join('/')}</td>
       <td><span class="cat-badge">${r.subcategoria}</span></td>
-      <td>${r.descricao || r.fornecedor || '—'}</td>
+      <td>${r.descricao || r.fornecedor || '—'}${r.parcela_info ? ' <span class="cat-badge">parcela ' + r.parcela_info + '</span>' : ''}</td>
       <td>${r.numero_nota || '—'}</td>
       <td class="valor">${fmtMoney(r.valor)}</td>
       <td class="acao"><button class="link-danger" data-role="del">excluir</button></td>

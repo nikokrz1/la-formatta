@@ -163,7 +163,7 @@ function render(items, pagos, ctx) {
 
   if (pagos.length) {
     html += `<details class="pagos"><summary>Pagos recentemente (${pagos.length})</summary>${pagos.map(d => `
-      <div class="item"><div><div class="t">✅ ${esc(d.descricao || d.subcategoria)}${d.parcela_info ? ' <span class="badge">' + esc(d.parcela_info) + '</span>' : ''}</div>
+      <div class="item"><div><div class="t">✅ ${esc(d.descricao || d.subcategoria)}${d.parcela_info ? ' <span class="badge">parcela ' + esc(d.parcela_info) + '</span>' : ''}</div>
       <div class="m">venc. ${fmtDateFull(d.vencimento)} · pago em ${fmtDateFull(d.pago_em)}</div></div>
       <div class="val mono">${fmtMoney(d.valor)}</div>
       <div class="act"><button class="link" data-act="desfazer" data-id="${d.id}">desfazer pagamento</button></div></div>`).join('')}</details>`;
@@ -178,7 +178,7 @@ function itemHtml(i, late) {
   const dias = Math.round((new Date(HOJE + 'T12:00:00') - new Date(i.venc + 'T12:00:00')) / 86400000);
   const tag = late ? `<span class="badge late">${dias} ${dias === 1 ? 'dia' : 'dias'} de atraso</span>` : (i.venc === HOJE ? '<span class="badge warn">vence hoje</span>' : '');
   return `<div class="item ${late ? 'late' : ''}">
-    <div><div class="t">${esc(i.desc)}${i.parcela ? ' <span class="badge">' + esc(i.parcela) + '</span>' : ''}</div>
+    <div><div class="t">${esc(i.desc)}${i.parcela ? ' <span class="badge">parcela ' + esc(i.parcela) + '</span>' : ''}</div>
       <div class="m"><span>vence ${fmtDate(i.venc)}</span><span class="badge">${esc(i.sub)}</span>${i.kind === 'fixo' ? '<span class="badge">item fixo · previsto</span>' : ''}${tag}</div>
       ${i.obs ? `<div class="m" style="margin-top:4px;color:var(--ink-soft);font-size:12.5px;line-height:1.35">${esc(i.obs)}</div>` : ''}</div>
     <div class="val mono">${i.valor ? fmtMoney(i.valor) : '—'}</div>
