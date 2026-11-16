@@ -120,17 +120,19 @@ async function load() {
     sbFetch('despesas?select=*&vencimento=not.is.null&pago_em=is.null&order=vencimento.asc,id.asc'),
     sbFetch('despesas?select=*&vencimento=not.is.null&pago_em=not.is.null&order=pago_em.desc,id.desc&limit=15'),
     sbFetch('despesas_recorrentes?select=*&ativo=is.true&dia_vencimento=not.is.null'),
-    sbFetch(`despesas?select=recorrente_id&recorrente_id=not.is.null&data=gte.${from}&data=lt.${to}`)
+    // inclui o mês anterior: itens "vence no mês seguinte" (luz, gás, celular…) têm competência do mês passado
+    sbFetch(`despesas?select=recorrente_id,data&recorrente_id=not.is.null&data=gte.${localISO(new Date(ano, mes0 - 1, 1))}&data=lt.${to}`)
   ]);
 
-  const jaLancado = new Set(lancMes.map(d => d.recorrente_id));
+  const jaLancado = new Set(lancMes.map(d => d.recorrente_id + '|' + String(d.data).slice(0, 7)));
+  const compDe = r => r.venc_mes_seguinte ? localISO(new Date(ano, mes0 - 1, 1)).slice(0, 7) : from.slice(0, 7);
   const items = pend.map(d => ({
     kind: 'despesa', id: d.id, venc: d.vencimento, desc: d.descricao || d.subcategoria,
     sub: d.subcategoria, valor: Number(d.valor), parcela: d.parcela_info, fornecedor: d.fornecedor,
     obs: [d.numero_nota && !(d.descricao || '').includes(d.numero_nota) ? 'NF ' + d.numero_nota : '', d.observacao].filter(Boolean).join(' | ')
   }));
-  recs.filter(r => !jaLancado.has(r.id)).forEach(r => items.push({
-    kind: 'fixo', id: r.id, rec: r, venc: vencDoMes(ano, mes0, r.dia_vencimento), desc: r.nome,
+  recs.filter(r => !jaLancado.has(r.id + '|' + compDe(r))).forEach(r => items.push({
+    kind: 'fixo', id: r.id, rec: r, comp: compDe(r), venc: vencDoMes(ano, mes0, r.dia_vencimento), desc: r.nome,
     sub: r.subcategoria, valor: Number(r.valor_padrao) || 0, parcela: null, previsto: true
   }));
   items.sort((a, b) => a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : 0);
@@ -198,7 +200,7 @@ async function pagar(i, btn, ctx) {
       if (isNaN(valor) || valor <= 0) { showToast('Valor inválido'); btn.disabled = false; return; }
       const r = i.rec;
       await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([{
-        data: ctx.from, categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome, valor: valor,
+        data: (i.comp || ctx.from.slice(0, 7)) + '-01', categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome, valor: valor,
         origem: 'checklist', recorrente_id: r.id, vencimento: i.venc, pago_em: HOJE
       }]) });
     }

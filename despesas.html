@@ -179,6 +179,9 @@ function renderNotas() {
             <option>Cartão de Crédito</option><option>Boleto</option><option>Transferência</option>
           </select>
         </div>
+        <div class="field"><label>Marcar no checklist</label>
+          <select id="fChecklist"><option value="auto">Automático (pelo nome)</option><option value="">Não marcar</option></select>
+        </div>
       </div>
       <button class="primary" id="btnLancar">Lançar despesa</button>
     </section>
@@ -197,6 +200,10 @@ function renderNotas() {
   fillSub();
   loadFornecedores();
   $('#fFornecedor').addEventListener('change', onFornecedorChange);
+  sbFetch('despesas_recorrentes?select=id,nome&ativo=is.true&order=nome.asc').then(rs => {
+    const sel = $('#fChecklist');
+    if (sel) sel.insertAdjacentHTML('beforeend', rs.map(r => `<option value="${r.id}">${r.nome}</option>`).join(''));
+  }).catch(() => {});
 
   $('#btnLancar').addEventListener('click', async () => {
     const valor = parseFloat($('#fValor').value);
@@ -213,8 +220,12 @@ function renderNotas() {
       origem: 'nota'
     };
     try {
+      // "Check" automático no checklist: liga o lançamento ao item fixo correspondente (mesma competência = mês da data).
+      let marcado = null;
+      try { marcado = await acharItemChecklist(payload, $('#fChecklist').value); } catch (e) { marcado = null; }
+      if (marcado) { payload.recorrente_id = marcado.id; payload.origem = 'checklist'; }
       await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([payload]) });
-      showToast('Lançado: ' + payload.subcategoria + ' — ' + fmtMoney(valor));
+      showToast('Lançado: ' + payload.subcategoria + ' — ' + fmtMoney(valor) + (marcado ? ' · ✅ checklist: ' + marcado.nome : ''));
       $('#fValor').value = ''; $('#fDescricao').value = ''; $('#fFornecedor').value = '';
       $('#fForma').value = ''; $('#fNumeroNota').value = '';
       loadRecent();
@@ -224,6 +235,30 @@ function renderNotas() {
   });
 
   loadRecent();
+}
+
+// Acha o item do checklist de um lançamento manual. escolha: 'auto' (pelo nome), '' (não marcar) ou o id do item.
+const normTxt = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+async function acharItemChecklist(payload, escolha) {
+  if (escolha === '') return null;
+  const recs = await sbFetch('despesas_recorrentes?select=*&ativo=is.true');
+  const mesIni = payload.data.slice(0, 7) + '-01';
+  const d = new Date(mesIni + 'T00:00:00'); d.setMonth(d.getMonth() + 1);
+  const mesFim = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+  const jaFeitos = new Set((await sbFetch(`despesas?select=recorrente_id&recorrente_id=not.is.null&data=gte.${mesIni}&data=lt.${mesFim}`)).map(x => x.recorrente_id));
+  const livres = recs.filter(r => !jaFeitos.has(r.id));
+  if (escolha !== 'auto') return livres.find(r => String(r.id) === escolha) || null; // escolhido à mão: só não liga se já estiver marcado
+  const texto = ' ' + normTxt((payload.fornecedor || '') + ' ' + (payload.descricao || '')) + ' ';
+  const stem = w => w.replace(/s$/, '');
+  const cands = livres.map(r => {
+    const toks = normTxt(r.nome).split(' ').filter(w => w.length >= 3 && !/^\d+$/.test(w) && !['dia', 'mes', 'para', 'com', 'por'].includes(w)).map(stem);
+    const acertos = toks.filter(w => texto.includes(' ' + w) || texto.includes(w)).length;
+    return { r, toks: toks.length, acertos, dist: Math.abs(Number(r.valor_padrao || 0) - payload.valor) };
+  }).filter(c => c.toks && c.acertos >= Math.ceil(c.toks / 2));
+  if (!cands.length) return null;
+  cands.sort((a, b) => b.acertos / b.toks - a.acertos / a.toks || a.dist - b.dist);
+  if (cands.length > 1 && cands[0].acertos / cands[0].toks === cands[1].acertos / cands[1].toks && cands[0].dist === cands[1].dist) return null; // ambíguo
+  return cands[0].r;
 }
 
 async function loadFornecedores() {
@@ -414,13 +449,14 @@ function renderRecorrentesCatalog() {
   if (!el) return;
   if (!recorrentesCache.length) { el.innerHTML = '<div class="empty-state">Nenhum item fixo cadastrado ainda.</div>'; return; }
   el.innerHTML = recorrentesCache.map(r => `
-    <div class="funcionario-row" data-id="${r.id}" style="grid-template-columns:1.4fr 1fr 0.9fr 0.7fr;">
+    <div class="funcionario-row" data-id="${r.id}" style="grid-template-columns:1.4fr 1fr 0.9fr 0.7fr 1fr;">
       <div class="field"><label>Nome</label><input type="text" data-role="nome" value="${r.nome}"></div>
       <div class="field"><label>Subcategoria</label>
         <select data-role="subcategoria">${Object.entries(CATEGORIAS).map(([cat, subs]) => subs.map(s => `<option value="${cat}|||${s}" ${r.categoria === cat && r.subcategoria === s ? 'selected' : ''}>${s}</option>`).join('')).join('')}</select>
       </div>
       <div class="field"><label>Valor padrão (R$)</label><input type="number" step="0.01" data-role="valor" value="${r.valor_padrao || ''}"></div>
       <div class="field"><label>Dia venc.</label><input type="number" min="1" max="31" step="1" placeholder="—" data-role="dia" value="${r.dia_vencimento || ''}"></div>
+      <div class="field"><label>Vence</label><select data-role="mesvenc"><option value="0" ${r.venc_mes_seguinte ? '' : 'selected'}>no mês</option><option value="1" ${r.venc_mes_seguinte ? 'selected' : ''}>mês seguinte</option></select></div>
     </div>`).join('');
   $$('.funcionario-row', el).forEach(row => {
     const id = row.dataset.id;
@@ -434,6 +470,7 @@ function renderRecorrentesCatalog() {
       const [categoria, subcategoria] = e.target.value.split('|||');
       saveRecorrente(id, { categoria, subcategoria });
     });
+    $('[data-role="mesvenc"]', row).addEventListener('change', e => saveRecorrente(id, { venc_mes_seguinte: e.target.value === '1' }));
   });
 }
 
@@ -497,8 +534,10 @@ async function loadChecklist() {
       };
       // Só quando o item tem "dia venc." cadastrado: passa a aparecer em Vencimentos até ser marcado como pago.
       if (r.dia_vencimento) {
-        const ult = new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
-        novo.vencimento = mes + '-' + String(Math.min(r.dia_vencimento, ult)).padStart(2, '0');
+        // O mês escolhido é a COMPETÊNCIA; itens "vence no mês seguinte" (luz, gás, celular…) vencem no mês depois.
+        const dv = new Date(+mes.slice(0, 4), +mes.slice(5, 7) - 1 + (r.venc_mes_seguinte ? 1 : 0), 1);
+        const ult = new Date(dv.getFullYear(), dv.getMonth() + 1, 0).getDate();
+        novo.vencimento = dv.getFullYear() + '-' + String(dv.getMonth() + 1).padStart(2, '0') + '-' + String(Math.min(r.dia_vencimento, ult)).padStart(2, '0');
       }
       await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([novo]) });
       showToast('Lançado: ' + r.nome);
