@@ -73,7 +73,7 @@
 
   .empty-state { text-align: center; padding: 30px 10px; color: var(--ink-soft); font-size: 13px; }
 
-  .funcionario-row { display: grid; grid-template-columns: 1.4fr 1fr 0.9fr; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); align-items: end; }
+  .funcionario-row { display: grid; grid-template-columns: 1.4fr 1fr 0.9fr auto; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); align-items: end; }
   .funcionario-row:last-child { border-bottom: none; }
 
   .toast {
@@ -360,7 +360,7 @@ function renderFuncionarios() {
 
 async function loadFuncionarios() {
   try {
-    funcionariosCache = await sbFetch('funcionarios?select=*&order=nome.asc');
+    funcionariosCache = await sbFetch('funcionarios?select=*&ativo=is.true&order=nome.asc');
   } catch (e) {
     $('#funcList').innerHTML = '<div class="empty-state">Não consegui carregar.</div>';
     return;
@@ -372,9 +372,17 @@ async function loadFuncionarios() {
       <div class="field"><label>Nome</label><input type="text" data-role="nome" value="${f.nome}"></div>
       <div class="field"><label>Cargo</label><input type="text" data-role="cargo" value="${f.cargo || ''}"></div>
       <div class="field"><label>Custo mensal (R$)</label><input type="number" step="0.01" data-role="custo" value="${f.custo_mensal}"></div>
+      <button class="link-danger" data-role="del" title="Excluir funcionário" style="padding-bottom:10px;">excluir</button>
     </div>`).join('');
   $$('.funcionario-row', el).forEach(row => {
     const id = row.dataset.id;
+    $('[data-role="del"]', row).addEventListener('click', async () => {
+      const f = funcionariosCache.find(x => x.id == id);
+      if (!confirm(`Excluir "${f ? f.nome : 'funcionário'}"?\n\nEle sai da lista e não entra mais na folha. Os lançamentos já feitos continuam no histórico.`)) return;
+      await sbFetch('funcionarios?id=eq.' + id, { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ ativo: false }) });
+      showToast('Funcionário excluído');
+      loadFuncionarios();
+    });
     ['nome', 'cargo', 'custo'].forEach(role => {
       $(`[data-role="${role}"]`, row).addEventListener('blur', async (e) => {
         const field = role === 'custo' ? 'custo_mensal' : role;
@@ -447,9 +455,10 @@ async function loadRecorrentesCatalog() {
 function renderRecorrentesCatalog() {
   const el = $('#recorrentesList');
   if (!el) return;
-  if (!recorrentesCache.length) { el.innerHTML = '<div class="empty-state">Nenhum item fixo cadastrado ainda.</div>'; return; }
-  el.innerHTML = recorrentesCache.map(r => `
-    <div class="funcionario-row" data-id="${r.id}" style="grid-template-columns:1.4fr 1fr 0.9fr 0.7fr 1fr;">
+  const lista = recorrentesCache.filter(r => r.ativo !== false);
+  if (!lista.length) { el.innerHTML = '<div class="empty-state">Nenhum item fixo cadastrado ainda.</div>'; return; }
+  el.innerHTML = lista.map(r => `
+    <div class="funcionario-row" data-id="${r.id}" style="grid-template-columns:1.4fr 1fr 0.9fr 0.7fr 1fr auto;">
       <div class="field"><label>Nome</label><input type="text" data-role="nome" value="${r.nome}"></div>
       <div class="field"><label>Subcategoria</label>
         <select data-role="subcategoria">${Object.entries(CATEGORIAS).map(([cat, subs]) => subs.map(s => `<option value="${cat}|||${s}" ${r.categoria === cat && r.subcategoria === s ? 'selected' : ''}>${s}</option>`).join('')).join('')}</select>
@@ -457,9 +466,18 @@ function renderRecorrentesCatalog() {
       <div class="field"><label>Valor padrão (R$)</label><input type="number" step="0.01" data-role="valor" value="${r.valor_padrao || ''}"></div>
       <div class="field"><label>Dia venc.</label><input type="number" min="1" max="31" step="1" placeholder="—" data-role="dia" value="${r.dia_vencimento || ''}"></div>
       <div class="field"><label>Vence</label><select data-role="mesvenc"><option value="0" ${r.venc_mes_seguinte ? '' : 'selected'}>no mês</option><option value="1" ${r.venc_mes_seguinte ? 'selected' : ''}>mês seguinte</option></select></div>
+      <button class="link-danger" data-role="del" title="Excluir item fixo" style="padding-bottom:10px;">excluir</button>
     </div>`).join('');
   $$('.funcionario-row', el).forEach(row => {
     const id = row.dataset.id;
+    $('[data-role="del"]', row).addEventListener('click', async () => {
+      const r = recorrentesCache.find(x => x.id == id);
+      if (!confirm(`Excluir o item fixo "${r ? r.nome : ''}"?\n\nEle sai do checklist, dos lembretes e do bot. Os lançamentos já feitos continuam no histórico.`)) return;
+      await sbFetch('despesas_recorrentes?id=eq.' + id, { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ ativo: false }) });
+      showToast('Item fixo excluído');
+      await loadRecorrentesCatalog();
+      loadChecklist();
+    });
     $('[data-role="nome"]', row).addEventListener('blur', e => saveRecorrente(id, { nome: e.target.value }));
     $('[data-role="valor"]', row).addEventListener('blur', e => saveRecorrente(id, { valor_padrao: parseFloat(e.target.value) || 0 }));
     $('[data-role="dia"]', row).addEventListener('blur', e => {
