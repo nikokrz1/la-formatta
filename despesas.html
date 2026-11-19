@@ -331,7 +331,26 @@ function renderRecentTable(target, rows) {
   });
 }
 
+// N-ésimo dia útil do mês (segunda a sexta, sem os feriados nacionais de data fixa). Usado por itens com "dia útil" (ex.: salário no 5º dia útil).
+const FERIADOS_FIXOS = ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '12-25'];
+function nDiaUtil(ano, mes0, n) {
+  const p2 = x => String(x).padStart(2, '0');
+  const d = new Date(ano, mes0, 1);
+  let c = 0;
+  for (let i = 0; i < 40; i++) {
+    const dow = d.getDay();
+    if (dow > 0 && dow < 6 && FERIADOS_FIXOS.indexOf(p2(mes0 + 1) + '-' + p2(d.getDate())) < 0 && ++c === n) return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+    d.setDate(d.getDate() + 1);
+  }
+  return ano + '-' + p2(mes0 + 1) + '-28';
+}
+
 // ---------- FUNCIONÁRIOS ----------
+const MODOS_FOLHA = {
+  mensal: 'Custo mensal estimado (só DRE)',
+  parcelas: 'Parcelas fixas (itens fixos / checklist)',
+  semanal: 'Pago semanal (lançar cada pagamento)'
+};
 function renderFuncionarios() {
   $('#mainArea').innerHTML = `
     <section class="card">
@@ -341,10 +360,11 @@ function renderFuncionarios() {
     </section>
     <section class="card">
       <h2>Lançar folha do mês</h2>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px;">Só lança quem está como <strong>"Custo mensal estimado"</strong>. Quem é pago em parcelas fixas (itens fixos) ou semanalmente (botão "registrar pagamento") <strong>não entra aqui</strong>, para não contar duas vezes.</p>
       <div class="form-grid">
         <div class="field"><label>Mês de referência</label><input type="month" id="folhaMes" value="${todayISO().slice(0,7)}"></div>
       </div>
-      <button class="primary" id="btnFolha">Lançar folha de todos os ativos</button>
+      <button class="primary" id="btnFolha">Lançar folha (custo mensal estimado)</button>
       <div id="folhaResult"></div>
     </section>
   `;
@@ -368,14 +388,37 @@ async function loadFuncionarios() {
   const el = $('#funcList');
   if (!funcionariosCache.length) { el.innerHTML = '<div class="empty-state">Nenhum funcionário cadastrado.</div>'; return; }
   el.innerHTML = funcionariosCache.map(f => `
-    <div class="funcionario-row" data-id="${f.id}">
+    <div class="funcionario-row" data-id="${f.id}" style="grid-template-columns:1fr 0.8fr 0.8fr 1.4fr auto auto;">
       <div class="field"><label>Nome</label><input type="text" data-role="nome" value="${f.nome}"></div>
       <div class="field"><label>Cargo</label><input type="text" data-role="cargo" value="${f.cargo || ''}"></div>
       <div class="field"><label>Custo mensal (R$)</label><input type="number" step="0.01" data-role="custo" value="${f.custo_mensal}"></div>
+      <div class="field"><label>Como é pago</label><select data-role="modo">${Object.entries(MODOS_FOLHA).map(([k, v]) => `<option value="${k}" ${(f.modo_folha || 'mensal') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      ${f.modo_folha === 'semanal' ? '<button class="secondary" data-role="pagar" title="Registrar um pagamento já feito" style="margin-bottom:2px;">registrar pagamento</button>' : '<span></span>'}
       <button class="link-danger" data-role="del" title="Excluir funcionário" style="padding-bottom:10px;">excluir</button>
     </div>`).join('');
   $$('.funcionario-row', el).forEach(row => {
     const id = row.dataset.id;
+    $('[data-role="modo"]', row).addEventListener('change', async (e) => {
+      await sbFetch('funcionarios?id=eq.' + id, { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ modo_folha: e.target.value }) });
+      showToast('Salvo');
+      loadFuncionarios();
+    });
+    const btnPagar = $('[data-role="pagar"]', row);
+    if (btnPagar) btnPagar.addEventListener('click', async () => {
+      const f = funcionariosCache.find(x => x.id == id);
+      const valorStr = prompt(`Valor pago a ${f.nome} (R$):`);
+      if (valorStr === null) return;
+      const valor = parseFloat(String(valorStr).replace(/\./g, '').replace(',', '.'));
+      if (isNaN(valor) || valor <= 0) { showToast('Valor inválido'); return; }
+      const dia = prompt('Data do pagamento (AAAA-MM-DD):', todayISO());
+      if (!dia || !/^\d{4}-\d{2}-\d{2}$/.test(dia)) { showToast('Data inválida'); return; }
+      await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([{
+        data: dia, categoria: 'Despesas Operacionais', subcategoria: 'Folha+Encargos',
+        descricao: f.nome + (f.cargo ? ' (' + f.cargo + ')' : ''), valor, funcionario_id: f.id, origem: 'funcionario',
+        vencimento: dia, pago_em: dia, observacao: 'Pagamento semanal'
+      }]) });
+      showToast('Pagamento registrado: ' + f.nome + ' — ' + fmtMoney(valor));
+    });
     $('[data-role="del"]', row).addEventListener('click', async () => {
       const f = funcionariosCache.find(x => x.id == id);
       if (!confirm(`Excluir "${f ? f.nome : 'funcionário'}"?\n\nEle sai da lista e não entra mais na folha. Os lançamentos já feitos continuam no histórico.`)) return;
@@ -398,8 +441,9 @@ async function lancarFolha() {
   const mesRef = $('#folhaMes').value; // "YYYY-MM"
   if (!mesRef) return;
   const dataCompetencia = mesRef + '-01';
-  const ativos = funcionariosCache.filter(f => f.ativo);
-  if (!ativos.length) { showToast('Nenhum funcionário ativo'); return; }
+  // Só quem está como "custo mensal estimado": quem é pago em parcelas fixas (itens fixos) ou semanalmente já entra pelos pagamentos reais.
+  const ativos = funcionariosCache.filter(f => f.ativo && (f.modo_folha || 'mensal') === 'mensal');
+  if (!ativos.length) { $('#folhaResult').innerHTML = '<p style="color:var(--ink-soft);font-size:13px;margin-top:10px;">Nenhum funcionário está como "custo mensal estimado". Quem é pago em parcelas fixas ou semanalmente não entra aqui (os pagamentos reais já são lançados).</p>'; return; }
 
   const existentes = await sbFetch(`despesas?select=funcionario_id&origem=eq.funcionario&data=eq.${dataCompetencia}`);
   const jaLancados = new Set(existentes.map(e => e.funcionario_id));
@@ -555,7 +599,9 @@ async function loadChecklist() {
         // O mês escolhido é a COMPETÊNCIA; itens "vence no mês seguinte" (luz, gás, celular…) vencem no mês depois.
         const dv = new Date(+mes.slice(0, 4), +mes.slice(5, 7) - 1 + (r.venc_mes_seguinte ? 1 : 0), 1);
         const ult = new Date(dv.getFullYear(), dv.getMonth() + 1, 0).getDate();
-        novo.vencimento = dv.getFullYear() + '-' + String(dv.getMonth() + 1).padStart(2, '0') + '-' + String(Math.min(r.dia_vencimento, ult)).padStart(2, '0');
+        novo.vencimento = r.dia_util
+          ? nDiaUtil(dv.getFullYear(), dv.getMonth(), r.dia_util)
+          : dv.getFullYear() + '-' + String(dv.getMonth() + 1).padStart(2, '0') + '-' + String(Math.min(r.dia_vencimento, ult)).padStart(2, '0');
       }
       await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([novo]) });
       showToast('Lançado: ' + r.nome);
