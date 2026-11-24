@@ -246,7 +246,7 @@ async function acharItemChecklist(payload, escolha) {
   const d = new Date(mesIni + 'T00:00:00'); d.setMonth(d.getMonth() + 1);
   const mesFim = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
   const jaFeitos = new Set((await sbFetch(`despesas?select=recorrente_id&recorrente_id=not.is.null&data=gte.${mesIni}&data=lt.${mesFim}`)).map(x => x.recorrente_id));
-  const livres = recs.filter(r => !jaFeitos.has(r.id));
+  const livres = recs.filter(r => r.pago_aos_poucos || !jaFeitos.has(r.id)); // item "pago aos poucos" aceita vários lançamentos no mês
   if (escolha !== 'auto') return livres.find(r => String(r.id) === escolha) || null; // escolhido à mão: só não liga se já estiver marcado
   const texto = ' ' + normTxt((payload.fornecedor || '') + ' ' + (payload.descricao || '')) + ' ';
   const stem = w => w.replace(/s$/, '');
@@ -570,6 +570,17 @@ async function loadChecklist() {
 
   el.innerHTML = ativos.map(r => {
     const d = porRecorrente[r.id];
+    if (r.pago_aos_poucos) { // pago em várias vezes: mostra o quanto da meta do mês já foi pago; cada "Lançar" soma um pagamento
+      const meus = lancados.filter(x => x.recorrente_id === r.id);
+      const soma = meus.reduce((s, x) => s + Number(x.valor), 0);
+      const meta = Number(r.valor_padrao) || 0;
+      const completo = meta > 0 && soma >= meta - 0.005;
+      const ultimo = meus.length ? meus[meus.length - 1] : null;
+      return `<div class="row-top" style="padding:10px 0;border-bottom:1px solid var(--border);">
+        <div><strong${completo ? '' : ' style="color:var(--ink-soft);"'}>${completo ? '✅' : '🔄'} ${r.nome}</strong><div style="font-size:12px;color:var(--ink-soft);">${meus.length} pagamento(s): ${fmtMoney(soma)} de ${fmtMoney(meta)}${completo ? '' : ' — falta ' + fmtMoney(meta - soma)}${r.valor_semanal ? ' · ' + fmtMoney(r.valor_semanal) + ' por semana' : ''}</div></div>
+        <div>${ultimo ? `<button class="link-danger" data-role="undo" data-despesa="${ultimo.id}">desfazer último</button> ` : ''}<button class="secondary" data-role="lancar-parcial" data-id="${r.id}">+ Lançar pagamento</button></div>
+      </div>`;
+    }
     if (d) {
       return `<div class="row-top" style="padding:10px 0;border-bottom:1px solid var(--border);">
         <div><strong>✅ ${r.nome}</strong><div style="font-size:12px;color:var(--ink-soft);">${fmtMoney(d.valor)} — lançado em ${d.data.split('-').reverse().join('/')}</div></div>
@@ -605,6 +616,23 @@ async function loadChecklist() {
       }
       await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([novo]) });
       showToast('Lançado: ' + r.nome);
+      loadChecklist();
+    });
+  });
+  $$('[data-role="lancar-parcial"]', el).forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const r = recorrentesCache.find(x => x.id == btn.dataset.id);
+      const valorStr = prompt(`Valor pago agora de "${r.nome}":`, r.valor_semanal || '');
+      if (valorStr === null) return;
+      const valor = parseFloat(String(valorStr).replace(',', '.'));
+      if (isNaN(valor) || valor <= 0) { showToast('Valor inválido'); return; }
+      const hoje = todayISO();
+      const dia = hoje.slice(0, 7) === mes ? hoje : from; // mês atual: paga hoje; outro mês: dia 1 dele
+      await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([{
+        data: from, categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome, valor,
+        origem: 'checklist', recorrente_id: r.id, vencimento: dia, pago_em: dia
+      }]) });
+      showToast('Pagamento lançado: ' + r.nome);
       loadChecklist();
     });
   });

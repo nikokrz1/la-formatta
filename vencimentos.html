@@ -146,7 +146,7 @@ async function load() {
   const [pend, pagos, recs, lancMes, folha] = await Promise.all([
     sbFetch('despesas?select=*&vencimento=not.is.null&pago_em=is.null&order=vencimento.asc,id.asc'),
     sbFetch('despesas?select=*&vencimento=not.is.null&pago_em=not.is.null&order=pago_em.desc,id.desc&limit=15'),
-    sbFetch('despesas_recorrentes?select=*&ativo=is.true&dia_vencimento=not.is.null'),
+    sbFetch('despesas_recorrentes?select=*&ativo=is.true&dia_vencimento=not.is.null&pago_aos_poucos=is.false'),
     // inclui o mês anterior: itens "vence no mês seguinte" (luz, gás, celular…) têm competência do mês passado
     sbFetch(`despesas?select=recorrente_id,data&recorrente_id=not.is.null&data=gte.${localISO(new Date(ano, mes0 - 1, 1))}&data=lt.${to}`),
     // pagamentos a funcionários/motoboys das últimas semanas (base da previsão das segundas-feiras)
@@ -177,6 +177,26 @@ async function load() {
     items.push({ kind: 'previsao', id: m, venc: m, desc: 'Folha semanal (previsão)', sub: 'Folha+Encargos', valor: porSeg[ref], parcela: null,
       obs: 'Igual ao pago na segunda ' + fmtDate(ref) + '. Lance cada pagamento (ex.: "paguei o Ivan 600" no bot) e esta previsão some.' });
   }
+  // Itens "pagos aos poucos" (ex.: Anúncios Meta, R$ 300 por semana, meta de R$ 1.200 no mês): toda segunda-feira sem pagamento
+  // naquela semana aparece com o valor semanal, limitado ao que falta para a meta do mês. Cada pagamento lançado abate da meta.
+  try {
+    const parciais = await sbFetch('despesas_recorrentes?select=*&ativo=is.true&pago_aos_poucos=is.true&valor_semanal=gt.0');
+    if (parciais.length) {
+      const pg = await sbFetch(`despesas?select=recorrente_id,data,pago_em,vencimento,valor&recorrente_id=in.(${parciais.map(r => r.id).join(',')})&data=gte.${from}&data=lt.${to}`);
+      parciais.forEach(r => {
+        const meus = pg.filter(d => d.recorrente_id === r.id);
+        let falta = (Number(r.valor_padrao) || 0) - meus.reduce((s, d) => s + Number(d.valor), 0);
+        for (let m = addDays(HOJE, (8 - new Date(HOJE + 'T12:00:00').getDay()) % 7); m <= fimDoMes && falta > 0.005; m = addDays(m, 7)) {
+          const fimSem = addDays(m, 6);
+          if (meus.some(d => { const dia = d.pago_em || d.vencimento; return dia >= m && dia <= fimSem; })) continue; // semana já paga
+          const v = Math.min(Number(r.valor_semanal), falta);
+          falta -= v;
+          items.push({ kind: 'fixo', id: r.id + '@' + m, rec: r, parcial: true, comp: from.slice(0, 7), venc: m, desc: r.nome + ' (semana)', sub: r.subcategoria, valor: v, parcela: null, previsto: true,
+            obs: 'Pago aos poucos: ' + fmtMoney(r.valor_semanal) + ' por semana, meta de ' + fmtMoney(r.valor_padrao) + ' no mês. Ao pagar, o valor abate da meta.' });
+        }
+      });
+    }
+  } catch (e) { console.error('parciais', e); }
   items.sort((a, b) => a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : 0);
   render(items, pagos, { ano, mes0, from });
 }
@@ -265,8 +285,8 @@ async function pagar(i, btn, ctx) {
       if (isNaN(valor) || valor <= 0) { showToast('Valor inválido'); btn.disabled = false; return; }
       const r = i.rec;
       await sbFetch('despesas', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify([{
-        data: (i.comp || ctx.from.slice(0, 7)) + '-01', categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome, valor: valor,
-        origem: 'checklist', recorrente_id: r.id, vencimento: i.venc, pago_em: HOJE
+        data: (i.parcial ? HOJE.slice(0, 7) : (i.comp || ctx.from.slice(0, 7))) + '-01', categoria: r.categoria, subcategoria: r.subcategoria, descricao: r.nome, valor: valor,
+        origem: 'checklist', recorrente_id: r.id, vencimento: i.parcial ? HOJE : i.venc, pago_em: HOJE
       }]) });
     }
     showToast('Pago: ' + i.desc);
