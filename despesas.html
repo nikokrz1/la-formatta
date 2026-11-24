@@ -567,17 +567,19 @@ async function loadChecklist() {
   const lancados = await sbFetch(`despesas?select=*&recorrente_id=not.is.null&data=gte.${from}&data=lt.${to}`);
   const porRecorrente = {};
   lancados.forEach(d => { porRecorrente[d.recorrente_id] = d; });
+  const pulos = await sbFetch(`recorrentes_pulos?select=recorrente_id,semana&semana=gte.${from}&semana=lt.${to}`).catch(() => []);
 
   el.innerHTML = ativos.map(r => {
     const d = porRecorrente[r.id];
     if (r.pago_aos_poucos) { // pago em várias vezes: mostra o quanto da meta do mês já foi pago; cada "Lançar" soma um pagamento
       const meus = lancados.filter(x => x.recorrente_id === r.id);
       const soma = meus.reduce((s, x) => s + Number(x.valor), 0);
-      const meta = Number(r.valor_padrao) || 0;
+      const nPulos = pulos.filter(p => p.recorrente_id === r.id).length; // semanas "desconsideradas" no bot baixam a meta
+      const meta = (Number(r.valor_padrao) || 0) - nPulos * (Number(r.valor_semanal) || 0);
       const completo = meta > 0 && soma >= meta - 0.005;
       const ultimo = meus.length ? meus[meus.length - 1] : null;
       return `<div class="row-top" style="padding:10px 0;border-bottom:1px solid var(--border);">
-        <div><strong${completo ? '' : ' style="color:var(--ink-soft);"'}>${completo ? '✅' : '🔄'} ${r.nome}</strong><div style="font-size:12px;color:var(--ink-soft);">${meus.length} pagamento(s): ${fmtMoney(soma)} de ${fmtMoney(meta)}${completo ? '' : ' — falta ' + fmtMoney(meta - soma)}${r.valor_semanal ? ' · ' + fmtMoney(r.valor_semanal) + ' por semana' : ''}</div></div>
+        <div><strong${completo ? '' : ' style="color:var(--ink-soft);"'}>${completo ? '✅' : '🔄'} ${r.nome}</strong><div style="font-size:12px;color:var(--ink-soft);">${meus.length} pagamento(s): ${fmtMoney(soma)} de ${fmtMoney(meta)}${nPulos ? ' (' + nPulos + ' semana(s) desconsiderada(s))' : ''}${completo ? '' : ' — falta ' + fmtMoney(meta - soma)}${r.valor_semanal ? ' · ' + fmtMoney(r.valor_semanal) + ' por semana' : ''}</div></div>
         <div>${ultimo ? `<button class="link-danger" data-role="undo" data-despesa="${ultimo.id}">desfazer último</button> ` : ''}<button class="secondary" data-role="lancar-parcial" data-id="${r.id}">+ Lançar pagamento</button></div>
       </div>`;
     }

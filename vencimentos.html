@@ -183,11 +183,15 @@ async function load() {
     const parciais = await sbFetch('despesas_recorrentes?select=*&ativo=is.true&pago_aos_poucos=is.true&valor_semanal=gt.0');
     if (parciais.length) {
       const pg = await sbFetch(`despesas?select=recorrente_id,data,pago_em,vencimento,valor&recorrente_id=in.(${parciais.map(r => r.id).join(',')})&data=gte.${from}&data=lt.${to}`);
+      // semanas "desconsideradas" (pelo bot): não entram na previsão e baixam a meta do mês
+      const pulos = await sbFetch(`recorrentes_pulos?select=recorrente_id,semana&semana=gte.${from}&semana=lt.${to}`).catch(() => []);
       parciais.forEach(r => {
         const meus = pg.filter(d => d.recorrente_id === r.id);
-        let falta = (Number(r.valor_padrao) || 0) - meus.reduce((s, d) => s + Number(d.valor), 0);
+        const meusPulos = pulos.filter(p => p.recorrente_id === r.id).map(p => p.semana);
+        let falta = (Number(r.valor_padrao) || 0) - meusPulos.length * Number(r.valor_semanal) - meus.reduce((s, d) => s + Number(d.valor), 0);
         for (let m = addDays(HOJE, (8 - new Date(HOJE + 'T12:00:00').getDay()) % 7); m <= fimDoMes && falta > 0.005; m = addDays(m, 7)) {
           const fimSem = addDays(m, 6);
+          if (meusPulos.includes(m)) continue;
           if (meus.some(d => { const dia = d.pago_em || d.vencimento; return dia >= m && dia <= fimSem; })) continue; // semana já paga
           const v = Math.min(Number(r.valor_semanal), falta);
           falta -= v;
